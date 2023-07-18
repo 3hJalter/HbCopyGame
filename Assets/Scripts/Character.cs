@@ -4,8 +4,8 @@ using UnityEngine.Serialization;
 public class Character : MonoBehaviour
 {
     [SerializeField] protected Animator animator;
-    [SerializeField] protected HealthBar healthBar;
-    [FormerlySerializedAs("_hp")] [SerializeField] private float hp;
+    [SerializeField] public HealthBar healthBar;
+    [FormerlySerializedAs("_hp")] [SerializeField] public float hp;
     [SerializeField] private CombatText combatTextPrefab;
     private string _currentAnim;
     protected bool IsDead => hp <= 0;

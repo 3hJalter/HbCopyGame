@@ -17,7 +17,7 @@ public class Player : Character
     [SerializeField] private bool isAttack;
     [SerializeField] private bool isGrounded = true;
     [SerializeField] private bool isJumping;
-    [SerializeField] private bool isGliding;
+    // [SerializeField] private bool isGliding;
     [SerializeField] private bool isGlideDone;
     [SerializeField] private Kunai kunaiPrefab;
     [SerializeField] private Kunai bombPrefab;
@@ -50,11 +50,21 @@ public class Player : Character
         }
         if (IsDead) return;
         isGrounded = CheckGrounded();
-        isGliding = !isGrounded && !isJumping;
-        if (isGliding && Input.GetKeyDown(KeyCode.Space) && !isGlideDone)
+       
+
+        if (Input.GetKeyDown(KeyCode.Space))
         {
-            Glide();
+            switch (isGlideDone)
+            {
+                case true:
+                    isGlideDone = false;
+                    break;
+                case false when !isGrounded:
+                    Glide();
+                    break;
+            }
         }
+        
         _horizontal = Input.GetAxisRaw("Horizontal");
         if (!isGrounded || isJumping || isAttack) return;
         // jump
@@ -81,7 +91,7 @@ public class Player : Character
         }
         
         // check falling
-        if (isGliding && isGlideDone)
+        if (!isGrounded && isGlideDone)
         {
             rb.gravityScale = 0.0f;
             rb.velocity = new Vector2(rb.velocity.x, -1);
@@ -129,7 +139,6 @@ public class Player : Character
         isAttack = false;
         transform.position = savePoint;
         isGlideDone = false;
-        isGliding = false;
         ChangeAnim("Idle");
         DeActiveAttack();
         OnSavePoint();
@@ -215,7 +224,7 @@ public class Player : Character
 
     public void Glide()
     {
-        if (!isGliding || isGlideDone) return;
+        if (isGrounded || isGlideDone) return;
         isGlideDone = true;
         ChangeAnim("glide");
     }
