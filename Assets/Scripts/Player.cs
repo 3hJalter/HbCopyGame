@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using UnityEngine;
 
 public class Player : Character
@@ -7,6 +8,7 @@ public class Player : Character
 
     // [SerializeField] private Animator animator;
     [SerializeField] private LayerMask groundLayer;
+    [SerializeField] private GameObject predictPoint;
     [SerializeField] private float speed = 5f;
 
     [SerializeField] private float jumpForce = 350f;
@@ -15,9 +17,12 @@ public class Player : Character
     [SerializeField] private bool isAttack;
     [SerializeField] private bool isGrounded = true;
     [SerializeField] private bool isJumping;
+    [SerializeField] private bool isGliding;
+    [SerializeField] private bool isGlideDone;
     [SerializeField] private Kunai kunaiPrefab;
+    [SerializeField] private Kunai bombPrefab;
     [SerializeField] private Transform throwPoint;
-
+    [SerializeField] private GameObject predictPoints;
     [SerializeField] private Vector3 savePoint;
     // private float _vertical;
 
@@ -30,6 +35,7 @@ public class Player : Character
     private void Awake()
     {
         coin = PlayerPrefs.GetInt("coin", 0);
+        predictPoints = Instantiate(predictPoints, transform.position, Quaternion.Euler(Vector3.zero));
     }
 
     // Start is called before the first frame update
@@ -37,18 +43,32 @@ public class Player : Character
     // Update is called once per frame
     private void Update()
     {
+        var numPoint = predictPoints.transform.childCount;
+        for (var i = 0; i < numPoint; i++)
+        {
+            predictPoints.transform.GetChild(i).transform.position = PointPositions(i * 0.1f);
+        }
         if (IsDead) return;
         isGrounded = CheckGrounded();
-        // _horizontal = Input.GetAxisRaw("Horizontal");
+        isGliding = !isGrounded && !isJumping;
+        if (isGliding && Input.GetKeyDown(KeyCode.Space) && !isGlideDone)
+        {
+            Glide();
+        }
+        _horizontal = Input.GetAxisRaw("Horizontal");
         if (!isGrounded || isJumping || isAttack) return;
         // jump
         if (Input.GetKeyDown(KeyCode.Space)) Jump();
         // change run anim
-        if (Mathf.Abs(_horizontal) > 0.1f && !isJumping) ChangeAnim("run");
+        if (Mathf.Abs(_horizontal) > 0.1f && !isJumping)
+        {
+            ChangeAnim("run");
+        }
         // attack
         if (Input.GetKeyDown(KeyCode.C)) Attack();
         // throw
         if (Input.GetKeyDown(KeyCode.V)) Throw();
+        if (Input.GetMouseButtonDown(0)) Shoot();
     }
 
     private void FixedUpdate()
@@ -59,9 +79,18 @@ public class Player : Character
             rb.velocity = Vector2.zero;
             return;
         }
-
+        
         // check falling
-        if (!isGrounded && rb.velocity.y <= 0)
+        if (isGliding && isGlideDone)
+        {
+            rb.gravityScale = 0.0f;
+            rb.velocity = new Vector2(rb.velocity.x, -1);
+        }
+        else
+        {
+            rb.gravityScale = 1f;
+        }
+        if (!isGrounded && !isGlideDone && rb.velocity.y <= 0)
         {
             ChangeAnim("fall");
             isJumping = false;
@@ -70,18 +99,24 @@ public class Player : Character
 
         if (Mathf.Abs(_horizontal) != 0f)
         {
+            isLeft = _horizontal > 0;
             rb.velocity = new Vector2(_horizontal * Time.fixedDeltaTime * speed, rb.velocity.y);
-            transform.rotation = Quaternion.Euler(new Vector3(0, _horizontal > 0 ? 0f : 180f, 0));
+            transform.rotation = Quaternion.Euler(new Vector3(0, isLeft ? 0f : 180f, 0));
+            if (isGrounded && !isJumping)
+            {
+                isGlideDone = false;
+            }
         }
 
         else if (isGrounded && !isJumping)
         {
+            isGlideDone = false;
             rb.velocity = Vector2.zero;
             ChangeAnim("idle");
         }
     }
 
-    
+    [SerializeField] private bool isLeft;
 
     public void OnSavePoint()
     {
@@ -93,6 +128,8 @@ public class Player : Character
         base.OnInit();
         isAttack = false;
         transform.position = savePoint;
+        isGlideDone = false;
+        isGliding = false;
         ChangeAnim("Idle");
         DeActiveAttack();
         OnSavePoint();
@@ -113,8 +150,8 @@ public class Player : Character
     private bool CheckGrounded()
     {
         var position = transform.position;
-        Debug.DrawLine(position, position + Vector3.down * 1.2f, Color.red);
-        var hit = Physics2D.Raycast(position, Vector2.down, 1.2f, groundLayer);
+        Debug.DrawLine(position, position + Vector3.down * 1.3f, Color.red);
+        var hit = Physics2D.Raycast(position, Vector2.down, 1.3f, groundLayer);
         return hit.collider != null;
     }
 
@@ -148,9 +185,42 @@ public class Player : Character
         isAttack = true;
         ChangeAnim("throw");
         Invoke(nameof(ResetAttack), 0.25f);
-        Instantiate(kunaiPrefab, throwPoint.position, throwPoint.rotation);
+        var kunai = Instantiate(kunaiPrefab, throwPoint.position, throwPoint.rotation);
+        kunai.rb.velocity = transform.right * 5f;
     }
 
+    public Vector3 mousePos;
+    private void Shoot()
+    {
+        if (IsDead || !isGrounded || isJumping || isAttack) return;
+        isAttack = true;
+        ChangeAnim("throw");
+        Invoke(nameof(ResetAttack), 0.25f);
+        var bomb = Instantiate(bombPrefab, throwPoint.position, throwPoint.rotation);
+        bomb.rb.gravityScale = 1;
+        var position = transform.TransformPoint(Vector3.zero);
+        Debug.Log("Player" + position);
+        var direction = new Vector3((mousePos.x - position.x)*-1,
+            (mousePos.y - position.y)*-1,
+            mousePos.z - position.z);
+        direction = direction.normalized;
+        Debug.Log("Dir" + direction);
+        bomb.rb.velocity = direction * 20f / bomb.rb.mass;
+        bomb.posList = new List<Vector3>();
+        for (var i = 0; i < predictPoints.transform.childCount; i++)
+        {
+            bomb.posList.Add(predictPoints.transform.GetChild(i).transform.TransformPoint(Vector3.zero));
+        }
+    }
+
+    public void Glide()
+    {
+        if (!isGliding || isGlideDone) return;
+        isGlideDone = true;
+        ChangeAnim("glide");
+    }
+    
+    
     public void Jump()
     {
         if (IsDead || !isGrounded || isJumping) return;
@@ -171,15 +241,26 @@ public class Player : Character
     
     public void OnMovingPlatform()
     {
-        // isJumping = false;
-        // isGrounded = true;
-        // rb.velocity = Vector2.zero;
-        ChangeAnim("Idle");
+        if (isGrounded)
+        {
+            isGlideDone = false;
+            ChangeAnim("Idle");
+        }
     }
 
     public void SetMove(float horizontal)
     {
         _horizontal = horizontal;
+    }
+    
+    private Vector2 PointPositions(float t )
+    {
+        var position = transform.TransformPoint(Vector3.zero);
+        var direction = new Vector3((mousePos.x - position.x)*-1,
+            (mousePos.y - position.y)*-1).normalized;
+        var xPos = position.x + direction.x * 20f * t;
+        var yPos = position.y + direction.y * 20f * t - 0.5f * 9.8f * t * t;
+        return new Vector2(xPos, yPos);
     }
     
     private void OnTriggerEnter2D(Collider2D col)

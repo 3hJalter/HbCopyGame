@@ -3,7 +3,7 @@ using UnityEngine.Serialization;
 
 public class Character : MonoBehaviour
 {
-    [SerializeField] private Animator animator;
+    [SerializeField] protected Animator animator;
     [SerializeField] protected HealthBar healthBar;
     [FormerlySerializedAs("_hp")] [SerializeField] private float hp;
     [SerializeField] private CombatText combatTextPrefab;
